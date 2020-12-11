@@ -1649,9 +1649,10 @@ func (server *Server) StartWithConfig() (err error) {
 	// Wrap a TLS listener around the TCP connection
 	// certFn := filepath.Join(Args.DataDir, "cert.pem")
 	// keyFn := filepath.Join(Args.DataDir, "key.pem")
-	certFn := "/home/mgdelacroix/.grumble/cert.pem"
-	keyFn := "/home/mgdelacroix/.grumble/key.pem"
-	cert, err := tls.LoadX509KeyPair(certFn, keyFn)
+	// cert, err := tls.LoadX509KeyPair(certFn, keyFn)
+	certBytes := []byte(server.cfg.StringValue("Cert"))
+	keyBytes := []byte(server.cfg.StringValue("Key"))
+	cert, err := tls.X509KeyPair(certBytes, keyBytes)
 	if err != nil {
 		return err
 	}
@@ -1664,33 +1665,33 @@ func (server *Server) StartWithConfig() (err error) {
 	if shouldListenWeb {
 		// Create HTTP server and WebSocket "listener"
 		webaddr := &net.TCPAddr{IP: net.ParseIP(host), Port: webport}
-		// server.webtlscfg = &tls.Config{
-		// 	Certificates: []tls.Certificate{cert},
-		// 	ClientAuth:   tls.NoClientCert,
-		// 	NextProtos:   []string{"http/1.1"},
-		// }
+		server.webtlscfg = &tls.Config{
+			Certificates: []tls.Certificate{cert},
+			ClientAuth:   tls.NoClientCert,
+			NextProtos:   []string{"http/1.1"},
+		}
 		server.webwsl = web.NewListener(webaddr, server.Logger)
-		// mux := http.NewServeMux()
-		// mux.Handle("/", server.webwsl)
-		// server.webhttp = &http.Server{
-		// 	Addr:      webaddr.String(),
-		// 	Handler:   mux,
-		// 	TLSConfig: server.webtlscfg,
-		// 	ErrorLog:  server.Logger,
+		mux := http.NewServeMux()
+		mux.Handle("/", server.webwsl)
+		server.webhttp = &http.Server{
+			Addr:      webaddr.String(),
+			Handler:   mux,
+			TLSConfig: server.webtlscfg,
+			ErrorLog:  server.Logger,
 
-		// 	// Set sensible timeouts, in case no reverse proxy is in front of Grumble.
-		// 	// Non-conforming (or malicious) clients may otherwise block indefinitely and cause
-		// 	// file descriptors (or handles, depending on your OS) to leak and/or be exhausted
-		// 	ReadTimeout:  5 * time.Second,
-		// 	WriteTimeout: 10 * time.Second,
-		// 	IdleTimeout:  2 * time.Minute,
-		// }
-		// go func() {
-		// 	err := server.webhttp.ListenAndServeTLS("", "")
-		// 	if err != http.ErrServerClosed {
-		// 		server.Fatalf("Fatal HTTP server error: %v", err)
-		// 	}
-		// }()
+			// Set sensible timeouts, in case no reverse proxy is in front of Grumble.
+			// Non-conforming (or malicious) clients may otherwise block indefinitely and cause
+			// file descriptors (or handles, depending on your OS) to leak and/or be exhausted
+			ReadTimeout:  5 * time.Second,
+			WriteTimeout: 10 * time.Second,
+			IdleTimeout:  2 * time.Minute,
+		}
+		go func() {
+			err := server.webhttp.ListenAndServeTLS("", "")
+			if err != http.ErrServerClosed {
+				server.Fatalf("Fatal HTTP server error: %v", err)
+			}
+		}()
 
 		server.Printf("Started: listening on %v and %v", server.tcpl.Addr(), server.webwsl.Addr())
 	} else {
